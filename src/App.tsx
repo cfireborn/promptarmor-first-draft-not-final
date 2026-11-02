@@ -134,6 +134,13 @@ export default function App() {
           Date.parse(current(a).submittedAt),
     );
   const next = ready.find((r) => r.versions.length > 1) || ready[0];
+  const nextChangedCount = next
+    ? Object.keys(current(next).creative).filter(
+        (k) =>
+          current(next).creative[k as keyof Creative] !==
+          next.versions.at(-2)?.creative[k as keyof Creative],
+      ).length
+    : 0;
   return (
     <div className="app-shell">
       <a
@@ -220,7 +227,7 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace<span>/</span>
+            Demo workspace<span>/</span>
             <strong>
               {selected
                 ? "Creative review"
@@ -462,7 +469,7 @@ export default function App() {
                       {next.partner}
                       <span> · </span>
                       {next.versions.length > 1
-                        ? `${Object.keys(current(next).creative).filter((k) => current(next).creative[k as keyof Creative] !== next.versions.at(-2)?.creative[k as keyof Creative]).length} copy sections changed`
+                        ? `${nextChangedCount} copy ${nextChangedCount === 1 ? "section" : "sections"} changed`
                         : "Complete submission context"}
                     </p>
                   </div>
@@ -616,7 +623,7 @@ export default function App() {
                                 {current(r).findings.filter(
                                   (f) => f.status === "open",
                                 ).length > 0
-                                  ? `${current(r).findings.filter((f) => f.status === "open").length} findings to review`
+                                  ? `${current(r).findings.filter((f) => f.status === "open").length} finding${current(r).findings.filter((f) => f.status === "open").length === 1 ? "" : "s"} to review`
                                   : "Ready for human review"}
                               </small>
                             )}
@@ -827,6 +834,13 @@ export default function App() {
             >
               Open the example
               <ArrowRight size={16} />
+            </button>
+            <button
+              className="btn restart-demo"
+              onClick={() => setModal("reset")}
+            >
+              <RotateCcw size={14} />
+              Restart demo
             </button>
           </div>
         </Modal>

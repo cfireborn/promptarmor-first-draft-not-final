@@ -107,11 +107,19 @@ export default function ReviewWorkspace({
       return false;
     }
   };
-  const mark = (finding: Finding, status: Finding["status"]) =>
-    run(
+  const mark = (finding: Finding, status: Finding["status"]) => {
+    const changed = run(
       () => updateFinding(review, finding.id, status),
       status === "open" ? "Finding reopened." : "Finding verified.",
     );
+    if (changed && status !== "open")
+      requestAnimationFrame(() => {
+        const nextAction = document.querySelector<HTMLButtonElement>(
+          ".finding-card:not(.resolved) .verify, .approve-btn:not(:disabled)",
+        );
+        nextAction?.focus();
+      });
+  };
   const exportRecord = () => {
     const lines = [
       "CLEARPATH REVIEW — DEMO DECISION RECORD",
@@ -515,9 +523,11 @@ export default function ReviewWorkspace({
             />
           </div>
           <p className="findings-intro">
-            {previous
-              ? "The marketer has responded. You decide whether each finding is addressed."
-              : "Illustrative checks are a starting point. Review the full creative and add anything they missed."}
+            {review.status === "approved"
+              ? "This copy decision is recorded against the exact version and intended use."
+              : previous
+                ? "The marketer has responded. You decide whether each finding is addressed."
+                : "Illustrative checks are a starting point. Review the full creative and add anything they missed."}
           </p>
           <div className="finding-list">
             {version.findings.map((finding, index) => (
@@ -554,14 +564,14 @@ export default function ReviewWorkspace({
                   </span>
                 </div>
                 <h3>{finding.title}</h3>
-                <p className="concern-label">
-                  {previous?.findings.some((f) => f.id === finding.id)
-                    ? `Concern carried from v${previous.number}`
-                    : "Current review concern"}
-                </p>
-                <p>{finding.reason}</p>
                 {finding.status === "open" ? (
                   <>
+                    <p className="concern-label">
+                      {previous?.findings.some((f) => f.id === finding.id)
+                        ? `Concern carried from v${previous.number}`
+                        : "Current review concern"}
+                    </p>
+                    <p className="finding-reason">{finding.reason}</p>
                     <div className="requested-fix">
                       <strong>Requested change</strong>
                       <p>{finding.suggestion}</p>
@@ -610,14 +620,20 @@ export default function ReviewWorkspace({
                     )}
                   </>
                 ) : (
-                  <div className="finding-resolution">
-                    <p>{finding.note || "Reviewed and verified by you."}</p>
-                    {review.status === "ready" && (
-                      <button onClick={() => mark(finding, "open")}>
-                        Reopen
-                      </button>
-                    )}
-                  </div>
+                  <>
+                    <div className="finding-resolution">
+                      <p>{finding.note || "Reviewed and verified by you."}</p>
+                      {review.status === "ready" && (
+                        <button onClick={() => mark(finding, "open")}>
+                          Reopen
+                        </button>
+                      )}
+                    </div>
+                    <details className="original-concern">
+                      <summary>Original concern</summary>
+                      <p>{finding.reason}</p>
+                    </details>
+                  </>
                 )}
               </article>
             ))}

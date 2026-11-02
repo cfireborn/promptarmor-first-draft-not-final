@@ -3767,3 +3767,71 @@ td {
 .finding-card .concern-label + p {
   margin-top: 5px;
 }
+.restart-demo {
+  margin-left: 9px;
+}
+.breadcrumb {
+  gap: 11px;
+}
+@media (max-width: 700px) {
+  .breadcrumb {
+    font-size: 9px;
+    gap: 6px;
+  }
+  .topbar-right {
+    gap: 5px;
+  }
+  .local-status {
+    font-size: 9px;
+  }
+  .restart-demo {
+    margin: 10px 0 0;
+  }
+  .walkthrough > .btn {
+    width: 100%;
+  }
+}
+.finding-card .finding-reason {
+  font-size: 13px;
+  color: #626f51;
+  line-height: 1.7;
+  margin-top: 5px;
+}
+.original-concern {
+  font-size: 11px;
+  color: #62764c;
+  margin-top: 13px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e8d6;
+}
+.original-concern summary {
+  cursor: pointer;
+}
+.original-concern p {
+  font-size: 12px;
+  line-height: 1.65;
+  margin-top: 9px;
+}
+.original-concern summary:focus-visible {
+  outline: 3px solid #91bbaa;
+  outline-offset: 3px;
+}
+.finding-card.resolved {
+  animation: resolvedIn 0.25s ease;
+}
+.finding-card.resolved h3 {
+  color: #4f693c;
+}
+@keyframes resolvedIn {
+  from {
+    background: #dcebc8;
+  }
+  to {
+    background: #f8fbf4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .finding-card.resolved {
+    animation: none;
+  }
+}
