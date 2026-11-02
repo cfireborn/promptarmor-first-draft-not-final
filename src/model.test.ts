@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  addFinding, approveReview, checkCreative, createReview, current, loadReviews, makeSeed,
-  requestChanges, saveReviews, storageKey, submitRevision, updateFinding,
+  addFinding, approveReview, canVerifyFix, checkCreative, createReview, current, loadReviews, makeSeed,
+  readRecovery, requestChanges, saveReviews, storageKey, storageRecoveryNotice, submitRevision, updateFinding,
 } from './model';
 import type { Creative } from './model';
 
@@ -79,6 +79,39 @@ describe('review decisions', () => {
     expect(current(updated).findings[0].note).toBe('The claim refers to an unrelated service.');
     expect(updated.events.at(-1)?.message).toContain('The claim refers to an unrelated service.');
   });
+
+  it('allows quick verification only for a changed anchored field with no remaining matching check', () => {
+    let review = makeSeed()[0];
+    for (const finding of current(review).findings) {
+      expect(canVerifyFix(review, finding)).toBe(true);
+      review = updateFinding(review, finding.id, 'verified');
+    }
+    expect(approveReview(review, true).status).toBe('approved');
+  });
+
+  it('requires a reason for a new finding or a changed field that still matches the same check', () => {
+    const first = { ...makeSeed()[4], status: 'ready' as const };
+    const finding = current(first).findings[0];
+    expect(canVerifyFix(first, finding)).toBe(false);
+    expect(() => updateFinding(first, finding.id, 'verified')).toThrow(/review judgment/);
+    const waiting = requestChanges(first, 'Remove the guarantee.');
+    const revised = submitRevision(waiting, { ...current(waiting).creative, body: 'Apply today for guaranteed approval for a personal loan.' }, 'Reworded the introduction.');
+    expect(canVerifyFix(revised, current(revised).findings[0])).toBe(false);
+    expect(() => updateFinding(revised, finding.id, 'verified', '  ')).toThrow(/review judgment/);
+    const resolved = updateFinding(revised, finding.id, 'verified', 'Reviewed supporting evidence and documented why this claim applies.');
+    expect(current(resolved).findings[0].status).toBe('verified');
+    expect(resolved.events.at(-1)?.message).toContain('Reviewed supporting evidence');
+  });
+
+  it('requires a reason when only another creative field changed', () => {
+    const review = makeSeed()[0];
+    const waiting = requestChanges(review, 'Expand the disclosure.');
+    const revised = submitRevision(waiting, { ...current(waiting).creative, disclosure: `${current(waiting).creative.disclosure} Read all terms before applying.` }, 'Expanded the disclosure.');
+    for (const finding of current(revised).findings) {
+      expect(canVerifyFix(revised, finding)).toBe(false);
+      expect(() => updateFinding(revised, finding.id, 'verified')).toThrow(/review judgment/);
+    }
+  });
 });
 
 describe('human review findings', () => {
@@ -113,6 +146,9 @@ describe('human review findings', () => {
     const waiting = requestChanges(review, 'Please address the state restrictions.');
     const revised = submitRevision(waiting, { ...current(waiting).creative, disclosure: `${current(waiting).creative.disclosure} Offer not available in all states.` }, 'Added the state restriction.');
     expect(current(revised).findings.at(-1)).toMatchObject({ ...input, policyId: 'Reviewer', status: 'open' });
+    expect(canVerifyFix(review, current(review).findings.at(-1)!)).toBe(false);
+    expect(() => updateFinding(review, current(review).findings.at(-1)!.id, 'verified')).toThrow(/review judgment/);
+    expect(canVerifyFix(revised, current(revised).findings.at(-1)!)).toBe(true);
     expect(() => approveReview(revised, true)).toThrow(/every open finding/);
     mockStorage();
     expect(saveReviews([revised])).toBe(true);
@@ -199,11 +235,56 @@ describe('local persistence', () => {
   });
 
   it('falls back safely for malformed JSON and malformed or duplicate review data', () => {
-    for (const malformed of ['not JSON', '{}', '[]', '[{"id":"CP-1042"}]', JSON.stringify([makeSeed()[0], makeSeed()[0]])]) {
-      mockStorage(malformed);
+    for (const malformed of ['', 'not JSON', '{}', '[]', '[{"id":"CP-1042"}]', JSON.stringify([makeSeed()[0], makeSeed()[0]])]) {
+      const storage = mockStorage(malformed);
       expect(loadReviews()).toHaveLength(7);
       expect(loadReviews()[0].id).toBe('CP-1042');
+      expect(storage.getItem(`${storageKey}-recovery`)).toBe(malformed);
+      expect(storage.getItem(storageKey)).toBe(malformed);
+      expect(readRecovery()).toBe(malformed);
+      expect(storageRecoveryNotice()).toContain('preserved');
     }
+  });
+
+  it('retains the unreadable bytes before a later save replaces the active data', () => {
+    const raw = '{"versions": "older unsupported format"}';
+    const storage = mockStorage(raw);
+    const seed = loadReviews();
+    expect(saveReviews(seed)).toBe(true);
+    expect(loadReviews()).toEqual(seed);
+    expect(storage.getItem(`${storageKey}-recovery`)).toBe(raw);
+    expect(readRecovery()).toBe(raw);
+    expect(storageRecoveryNotice()).toContain('download');
+  });
+
+  it('also secures invalid data when saving before an initial load', () => {
+    const storage = mockStorage('unreadable original');
+    expect(saveReviews(makeSeed())).toBe(true);
+    expect(storage.getItem(`${storageKey}-recovery`)).toBe('unreadable original');
+  });
+
+  it('does not overwrite the original when storing its recovery copy fails', () => {
+    const storage = mockStorage('unreadable original');
+    storage.setItem.mockImplementation((key) => {
+      if (key === `${storageKey}-recovery`) throw new Error('Quota exceeded');
+      throw new Error('The original must not be written');
+    });
+    expect(loadReviews()).toHaveLength(7);
+    expect(saveReviews(makeSeed())).toBe(false);
+    expect(storage.getItem(storageKey)).toBe('unreadable original');
+    expect(storage.setItem.mock.calls.every(([key]) => key === `${storageKey}-recovery`)).toBe(true);
+    expect(readRecovery()).toBe('unreadable original');
+    expect(storageRecoveryNotice()).toContain('saving is paused');
+  });
+
+  it('preserves both copies when a different recovery already exists', () => {
+    const storage = mockStorage('new unreadable original');
+    storage.setItem(`${storageKey}-recovery`, 'earlier recovery');
+    loadReviews();
+    expect(saveReviews(makeSeed())).toBe(false);
+    expect(storage.getItem(storageKey)).toBe('new unreadable original');
+    expect(storage.getItem(`${storageKey}-recovery`)).toBe('earlier recovery');
+    expect(readRecovery()).toBe('new unreadable original');
   });
 
   it('rejects approvals for an old version or with unresolved findings', () => {
@@ -223,6 +304,8 @@ describe('local persistence', () => {
     vi.stubGlobal('localStorage', undefined);
     expect(loadReviews()).toHaveLength(7);
     expect(saveReviews(makeSeed())).toBe(false);
+    expect(readRecovery()).toBeNull();
+    expect(storageRecoveryNotice()).toBeNull();
     vi.stubGlobal('localStorage', { getItem: () => { throw new Error('Unavailable'); }, setItem: () => { throw new Error('Quota'); } });
     expect(loadReviews()).toHaveLength(7);
     expect(saveReviews(makeSeed())).toBe(false);

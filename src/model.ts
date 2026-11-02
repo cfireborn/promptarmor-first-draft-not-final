@@ -56,6 +56,7 @@ const fields: (keyof Creative)[] = ['headline', 'body', 'cta', 'disclosure'];
 const products = ['Personal loans', 'Credit cards', 'Mortgage'];
 const findingStatuses = ['open', 'verified', 'dismissed'];
 export const storageKey = 'clearpath-review-v1';
+const recoveryKey = `${storageKey}-recovery`;
 
 const nonempty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -122,6 +123,16 @@ export function addFinding(review: Review, input: { title: string; field: keyof 
     `Added “${finding.title}” on v${version.number} (${finding.field}): ${finding.reason} Requested change: ${finding.suggestion}`);
 }
 
+export function canVerifyFix(review: Review, finding: Finding): boolean {
+  const version = current(review);
+  const previous = review.versions.at(-2);
+  const active = version.findings.find((item) => item.id === finding.id && item.field === finding.field);
+  return review.status === 'ready' && !!active && !!previous &&
+    previous.findings.some((item) => item.id === finding.id && item.field === finding.field) &&
+    normalized(previous.creative[finding.field]) !== normalized(version.creative[finding.field]) &&
+    !checkCreative(version.creative).some((item) => item.id === finding.id);
+}
+
 export function updateFinding(review: Review, id: string, status: Finding['status'], note = ''): Review {
   requireThat(review.status === 'ready', 'Only a review that is ready can have its findings changed.');
   requireThat(findingStatuses.includes(status), 'Choose a valid finding status.');
@@ -130,6 +141,7 @@ export function updateFinding(review: Review, id: string, status: Finding['statu
   const version = current(review);
   const finding = version.findings.find((item) => item.id === id);
   requireThat(finding, 'This finding does not belong to the current version.');
+  requireThat(status !== 'verified' || nonempty(note) || canVerifyFix(review, finding!), 'Add a note explaining your review judgment before resolving this finding.');
   const findings = version.findings.map((item) => item.id === id ? { ...item, status, note: note.trim() } : item);
   const verb = status === 'verified' ? 'Verified' : status === 'dismissed' ? 'Dismissed' : 'Reopened';
   return recordEvent(replaceCurrent(review, { ...version, findings }), 'You', `${verb} “${finding!.title}” on v${version.number}.${note.trim() ? ` ${note.trim()}` : ''}`);
@@ -197,7 +209,8 @@ export function createReview(input: {
 }
 
 export function makeSeed(): Review[] {
-  const date = (hours: number) => new Date(Date.now() + hours * 3600000).toISOString();
+  const seededAt = Date.now();
+  const date = (hours: number) => new Date(seededAt + hours * 3600000).toISOString();
   const loanDisclosure = 'Illustrative offer. Personal loans from $2,000–$35,000. APRs range from 9.99%–29.99%; terms of 24–60 months. Your rate depends on creditworthiness. Approval and terms are subject to eligibility and credit review.';
   const original: Creative = { headline: 'A little breathing room', body: 'Life happens. Get guaranteed approval for a personal loan with rates from 9.99%.', cta: 'Get my loan', disclosure: 'Loans from $2,000–$35,000. Terms apply.' };
   const revised: Creative = { headline: 'A little breathing room', body: 'Make room for what comes next. Explore a personal loan with fixed rates from 9.99% APR, subject to credit approval.', cta: 'Explore my options', disclosure: loanDisclosure };
@@ -212,7 +225,7 @@ export function makeSeed(): Review[] {
   returning.versions.push({
     number: 2, creative: revised, submittedAt: date(-1), submittedBy: 'Maya Chen',
     response: 'Removed the approval guarantee, changed the CTA to “Explore my options,” and added APR, the rate range, and eligibility terms. Please verify the revised copy and disclosure together.',
-    findings: checkCreative(original).map((finding) => ({ ...finding, status: 'open', reason: `${finding.reason} This was flagged on v1; the marketer has revised the copy. Verify the current version before resolving.` })),
+    findings: checkCreative(original).map((finding) => ({ ...finding, status: 'open', reason: `Flagged on v1: ${finding.reason} The marketer has revised the copy. Verify the current version before resolving.` })),
   });
   returning.events.push(
     { id: 'CP-1042-requested', at: date(-24), actor: 'Alex Morgan', message: 'Requested changes on v1: remove guaranteed approval and identify the APR with relevant terms.' },
@@ -282,21 +295,69 @@ function validReviews(value: unknown): value is Review[] {
   return Array.isArray(value) && value.length > 0 && value.every(validReview) && unique(value.map((review) => review.id));
 }
 
+function parseReviews(raw: string): Review[] | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return validReviews(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+function preserveRecovery(raw: string): boolean {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return false;
+    const existing = storage.getItem(recoveryKey);
+    if (existing !== null) return existing === raw;
+    storage.setItem(recoveryKey, raw);
+    return storage.getItem(recoveryKey) === raw;
+  } catch { return false; }
+}
+
+/** Returns the original bytes for download; it does not try to repair or execute them. */
+export function readRecovery(): string | null {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return null;
+    const saved = storage.getItem(storageKey);
+    if (saved !== null && !parseReviews(saved)) return saved;
+    return storage.getItem(recoveryKey);
+  } catch { return null; }
+}
+
+export function storageRecoveryNotice(): string | null {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return null;
+    const saved = storage.getItem(storageKey);
+    const recovery = storage.getItem(recoveryKey);
+    if (saved !== null && !parseReviews(saved)) {
+      return recovery === saved
+        ? 'Saved reviews could not be read. Demo data is shown, and the original data is preserved in a recovery copy.'
+        : 'Saved reviews could not be read. Demo data is shown. The original data is untouched, and saving is paused because a recovery copy could not be secured.';
+    }
+    return recovery !== null ? 'An earlier saved review could not be read. Its original data is preserved in a recovery copy you can download.' : null;
+  } catch { return null; }
+}
+
 export function loadReviews(): Review[] {
   try {
     const saved = globalThis.localStorage?.getItem(storageKey);
-    if (saved) {
-      const parsed: unknown = JSON.parse(saved);
-      if (validReviews(parsed)) return parsed;
+    if (saved !== undefined && saved !== null) {
+      const parsed = parseReviews(saved);
+      if (parsed) return parsed;
+      preserveRecovery(saved);
     }
-  } catch { /* Private browsing, unavailable storage, or invalid JSON: use demo data. */ }
+  } catch { /* Unavailable browser storage: show demo data for this session. */ }
   return makeSeed();
 }
 
 export function saveReviews(reviews: Review[]): boolean {
   try {
-    if (!validReviews(reviews) || !globalThis.localStorage) return false;
-    globalThis.localStorage.setItem(storageKey, JSON.stringify(reviews));
+    const storage = globalThis.localStorage;
+    if (!validReviews(reviews) || !storage) return false;
+    const saved = storage.getItem(storageKey);
+    if (saved !== null && !parseReviews(saved) && !preserveRecovery(saved)) return false;
+    storage.setItem(storageKey, JSON.stringify(reviews));
     return true;
   } catch { return false; }
 }
