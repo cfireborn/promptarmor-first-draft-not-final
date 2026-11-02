@@ -187,12 +187,18 @@ export function approveReview(review: Review, attested: boolean): Review {
 
 export function createReview(input: {
   title: string; product: Review['product']; channel: string; placement: string;
-  audience: string; partner: string; owner: string; creative: Creative;
+  audience: string; partner: string; owner: string; creative: Creative; due?: string;
 }): Review {
   for (const key of ['title', 'channel', 'placement', 'audience', 'partner', 'owner'] as const) {
     requireThat(nonempty(input[key]), `Complete the ${key} before submitting.`);
   }
   requireThat(products.includes(input.product), 'Choose a supported product.');
+  if (input.due !== undefined) {
+    const validDate = typeof input.due === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(input.due) && timestamp(input.due);
+    requireThat(validDate, 'Choose a valid requested launch date and time.');
+    const calendarDate = input.due.slice(0, 10);
+    requireThat(new Date(`${calendarDate}T00:00:00Z`).toISOString().startsWith(calendarDate), 'Choose a valid requested launch date and time.');
+  }
   validateCreative(input.creative);
   const creative = Object.fromEntries(fields.map((field) => [field, input.creative[field].trim()])) as Creative;
   const submittedAt = now();
@@ -201,7 +207,7 @@ export function createReview(input: {
     title: input.title.trim(), product: input.product, channel: input.channel.trim(), placement: input.placement.trim(),
     audience: input.audience.trim(), partner: input.partner.trim(), owner: input.owner.trim(),
     initials: input.owner.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
-    due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), status: 'ready',
+    due: input.due ? new Date(input.due).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), status: 'ready',
     versions: [{ number: 1, creative, submittedAt, submittedBy: input.owner.trim(), response: '', findings: checkCreative(creative) }],
     events: [{ id: uid(), at: submittedAt, actor: input.owner.trim(), message: 'Submitted v1 for review.' }],
   };

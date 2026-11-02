@@ -1,12 +1,16 @@
 import { useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, ClipboardList, FileText } from 'lucide-react';
-import { checkCreative, createReview, current, submitRevision } from './model';
+import { checkCreative, createReview, current, formatTimestamp, submitRevision } from './model';
 import type { Creative, Review } from './model';
 import './submission.css';
 
 type Props = { review?: Review; onSave: (review: Review) => void; onCancel: () => void };
-type Context = { title: string; product: Review['product']; channel: string; placement: string; audience: string; partner: string; owner: string };
+type Context = { title: string; product: Review['product']; channel: string; placement: string; audience: string; partner: string; owner: string; due: string };
+
+function localDateTime(date: Date): string {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
 
 const example = {
   context: {
@@ -26,8 +30,8 @@ export default function Submission({ review, onSave, onCancel }: Props) {
   const [step, setStep] = useState<'context' | 'creative'>(review ? 'creative' : 'context');
   const [context, setContext] = useState<Context>(() => review ? {
     title: review.title, product: review.product, channel: review.channel, placement: review.placement,
-    audience: review.audience, partner: review.partner, owner: review.owner,
-  } : { title: '', product: 'Personal loans', channel: 'Paid social', placement: '', audience: '', partner: 'ClearPath direct', owner: '' });
+    audience: review.audience, partner: review.partner, owner: review.owner, due: localDateTime(new Date(review.due)),
+  } : { title: '', product: 'Personal loans', channel: 'Paid social', placement: '', audience: '', partner: 'ClearPath direct', owner: '', due: '' });
   const [creative, setCreative] = useState<Creative>(() => initialVersion ? { ...initialVersion.creative } : { headline: '', body: '', cta: '', disclosure: '' });
   const [response, setResponse] = useState('');
   const [error, setError] = useState('');
@@ -58,13 +62,14 @@ export default function Submission({ review, onSave, onCancel }: Props) {
     if (step === 'context') {
       const missing = Object.values(context).some((value) => !value.trim());
       if (missing) { setError('Complete every context field before continuing.'); return; }
+      if (!Number.isFinite(new Date(context.due).getTime())) { setError('Choose a valid requested launch date and time.'); return; }
       setStep('creative');
       setNotice('');
       requestAnimationFrame(() => firstCreative.current?.focus());
       return;
     }
     try {
-      const result = review ? submitRevision(review, creative, response) : createReview({ ...context, creative });
+      const result = review ? submitRevision(review, creative, response) : createReview({ ...context, due: new Date(context.due).toISOString(), creative });
       onSave(result);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'This submission could not be saved. Please try again.');
@@ -72,7 +77,7 @@ export default function Submission({ review, onSave, onCancel }: Props) {
   }
 
   function useExample() {
-    setContext({ ...example.context });
+    setContext({ ...example.context, due: localDateTime(new Date(Date.now() + 48 * 60 * 60 * 1000)) });
     setCreative({ ...example.creative });
     setError('');
     setNotice('Fictional example filled in. Review the details before submitting.');
@@ -132,6 +137,10 @@ export default function Submission({ review, onSave, onCancel }: Props) {
           <input id={`${id}-audience`} value={context.audience} onChange={(event) => setContextField('audience', event.target.value)} required aria-describedby={`${id}-audience-hint`} />
           <span className="submission-hint" id={`${id}-audience-hint`}>Include geography, age range, and targeting restrictions.</span>
         </label>
+        <label className="field submission-full" htmlFor={`${id}-due`}>Requested launch
+          <input id={`${id}-due`} type="datetime-local" value={context.due} onChange={(event) => setContextField('due', event.target.value)} required aria-describedby={`${id}-due-hint`} />
+          <span className="submission-hint" id={`${id}-due-hint`}>Your local date and time. This helps reviewers prioritize; it does not guarantee approval by launch.</span>
+        </label>
       </div> : <>
         <div className="submission-scope">
           <strong>{context.title}</strong>
@@ -142,6 +151,7 @@ export default function Submission({ review, onSave, onCancel }: Props) {
             <div><dt>Owner</dt><dd>{context.owner}</dd></div>
             <div className="submission-full"><dt>Placement</dt><dd>{context.placement}</dd></div>
             <div className="submission-full"><dt>Audience</dt><dd>{context.audience}</dd></div>
+            <div className="submission-full"><dt>Launch</dt><dd>{formatTimestamp(review?.due ?? new Date(context.due).toISOString())} · local time</dd></div>
           </dl>
         </div>
 
@@ -196,7 +206,7 @@ export default function Submission({ review, onSave, onCancel }: Props) {
           <button type="submit" className="btn primary">{step === 'context' ? <>Continue to creative<ArrowRight size={16} aria-hidden="true" /></> : review ? `Submit version ${initialVersion!.number + 1}` : 'Submit for review'}</button>
         </div>
       </footer>
-      <p className="submission-footnote">Fictional demo · Saved in this browser · Every submission needs human review</p>
+      <p className="submission-footnote">Fictional demo · Saved in this browser after submitting · Drafts are not saved</p>
     </form>
   </div>;
 }

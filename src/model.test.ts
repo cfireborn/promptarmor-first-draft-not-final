@@ -223,6 +223,18 @@ describe('illustrative checks and intake', () => {
     expect(() => createReview({ ...input, creative: { ...input.creative, disclosure: '' } })).toThrow(/Complete/);
     expect(createReview(input).id).not.toBe(review.id);
   });
+
+  it('stores the requested launch instant and rejects invalid launch timestamps', () => {
+    const input = { title: 'Test campaign', product: 'Personal loans' as const, channel: 'Email', placement: 'Email body', audience: 'US adults 18+', partner: 'ClearPath direct', owner: 'Jordan Lee', creative: current(makeSeed()[1]).creative };
+    const review = createReview({ ...input, due: '2026-11-03T12:30:00-08:00' });
+    expect(review.due).toBe('2026-11-03T20:30:00.000Z');
+    const waiting = requestChanges(addFinding(review, { title: 'Clarify offer terms', field: 'body', reason: 'The offer needs clarification.', suggestion: 'Describe the loan term.' }), 'Describe the loan term.');
+    const revised = submitRevision(waiting, { ...current(waiting).creative, body: `${current(waiting).creative.body} Terms of 24–60 months.` }, 'Added loan terms.');
+    expect(revised.due).toBe(review.due);
+    for (const due of ['', 'tomorrow', '2026-11-03', '2026-02-30T12:00:00.000Z', '2026-11-03T99:00:00.000Z']) {
+      expect(() => createReview({ ...input, due })).toThrow(/requested launch/);
+    }
+  });
 });
 
 describe('local persistence', () => {
