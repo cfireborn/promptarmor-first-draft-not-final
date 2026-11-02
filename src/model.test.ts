@@ -1,153 +1,266 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  addFinding, approveReview, canVerifyFix, checkCreative, createReview, current, loadReviews, makeSeed,
-  readRecovery, requestChanges, saveReviews, storageKey, storageRecoveryNotice, submitRevision, updateFinding,
-} from './model';
-import type { Creative } from './model';
+  addFinding,
+  approveReview,
+  canVerifyFix,
+  checkCreative,
+  createReview,
+  current,
+  loadReviews,
+  makeSeed,
+  readRecovery,
+  requestChanges,
+  saveReviews,
+  storageKey,
+  storageRecoveryNotice,
+  submitRevision,
+  updateFinding,
+} from "./model";
+import type { Creative } from "./model";
 
 afterEach(() => vi.unstubAllGlobals());
 
 function resolveFirstReview() {
   let review = makeSeed()[0];
-  for (const finding of current(review).findings) review = updateFinding(review, finding.id, 'verified', 'Checked the revised creative and offer terms.');
+  for (const finding of current(review).findings)
+    review = updateFinding(
+      review,
+      finding.id,
+      "verified",
+      "Checked the revised creative and offer terms.",
+    );
   return review;
 }
 
 function mockStorage(initial?: string) {
-  const values = new Map<string, string>(initial === undefined ? [] : [[storageKey, initial]]);
-  const storage = { getItem: vi.fn((key: string) => values.get(key) ?? null), setItem: vi.fn((key: string, value: string) => values.set(key, value)) };
-  vi.stubGlobal('localStorage', storage);
+  const values = new Map<string, string>(
+    initial === undefined ? [] : [[storageKey, initial]],
+  );
+  const storage = {
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+  };
+  vi.stubGlobal("localStorage", storage);
   return storage;
 }
 
-describe('review decisions', () => {
-  it('starts the revised demonstration with two findings still requiring human verification', () => {
+describe("review decisions", () => {
+  it("starts the revised demonstration with two findings still requiring human verification", () => {
     const review = makeSeed()[0];
-    expect(review.id).toBe('CP-1042');
+    expect(review.id).toBe("CP-1042");
     expect(review.versions).toHaveLength(2);
     expect(current(review).findings).toHaveLength(2);
-    expect(current(review).findings.every((finding) => finding.status === 'open')).toBe(true);
+    expect(
+      current(review).findings.every((finding) => finding.status === "open"),
+    ).toBe(true);
     expect(checkCreative(current(review).creative)).toEqual([]);
     expect(() => approveReview(review, true)).toThrow(/every open finding/);
   });
 
-  it('requires both explicit disposition of findings and a full-review attestation', () => {
+  it("requires both explicit disposition of findings and a full-review attestation", () => {
     const resolved = resolveFirstReview();
     expect(() => approveReview(resolved, false)).toThrow(/Confirm/);
     const approved = approveReview(resolved, true);
-    expect(approved.status).toBe('approved');
-    expect(approved.approval).toMatchObject({ version: 2, by: 'You' });
-    expect(approved.approval?.scope).toContain('BrightNest');
-    expect(approved.approval?.scope).toContain('Instagram feed');
-    expect(resolved.status).toBe('ready');
+    expect(approved.status).toBe("approved");
+    expect(approved.approval).toMatchObject({ version: 2, by: "You" });
+    expect(approved.approval?.scope).toContain("BrightNest");
+    expect(approved.approval?.scope).toContain("Instagram feed");
+    expect(resolved.status).toBe("ready");
     expect(resolved.approval).toBeUndefined();
   });
 
-  it('requires full-review attestation even when no text checks trigger', () => {
+  it("requires full-review attestation even when no text checks trigger", () => {
     const review = makeSeed()[1];
     expect(current(review).findings).toEqual([]);
     expect(() => approveReview(review, false)).toThrow(/Confirm/);
-    expect(approveReview(review, true).status).toBe('approved');
+    expect(approveReview(review, true).status).toBe("approved");
   });
 
-  it('does not mutate a submitted version or its existing event history', () => {
+  it("does not mutate a submitted version or its existing event history", () => {
     const review = makeSeed()[0];
     const before = structuredClone(review);
     const findingId = current(review).findings[0].id;
-    const updated = updateFinding(review, findingId, 'verified', 'Reviewed the qualification.');
+    const updated = updateFinding(
+      review,
+      findingId,
+      "verified",
+      "Reviewed the qualification.",
+    );
     expect(review).toEqual(before);
     expect(updated.versions[0]).toEqual(before.versions[0]);
-    expect(current(updated).findings[0].status).toBe('verified');
+    expect(current(updated).findings[0].status).toBe("verified");
     expect(updated.events).toHaveLength(review.events.length + 1);
-    expect(() => updateFinding(review, 'unknown-finding', 'verified')).toThrow(/current version/);
+    expect(() => updateFinding(review, "unknown-finding", "verified")).toThrow(
+      /current version/,
+    );
   });
 
-  it('keeps approved reviews immutable through the public mutation functions', () => {
+  it("keeps approved reviews immutable through the public mutation functions", () => {
     const approved = approveReview(resolveFirstReview(), true);
-    expect(() => updateFinding(approved, current(approved).findings[0].id, 'open')).toThrow(/ready/);
-    expect(() => requestChanges(approved, 'Try something else.')).toThrow(/ready/);
-    expect(() => submitRevision(approved, current(approved).creative, 'Changed it.')).toThrow(/requested/);
+    expect(() =>
+      updateFinding(approved, current(approved).findings[0].id, "open"),
+    ).toThrow(/ready/);
+    expect(() => requestChanges(approved, "Try something else.")).toThrow(
+      /ready/,
+    );
+    expect(() =>
+      submitRevision(approved, current(approved).creative, "Changed it."),
+    ).toThrow(/requested/);
     expect(() => approveReview(approved, true)).toThrow(/ready/);
   });
 
-  it('records a dismissal reason and rejects an unexplained dismissal', () => {
+  it("records a dismissal reason and rejects an unexplained dismissal", () => {
     const review = makeSeed()[0];
     const id = current(review).findings[0].id;
-    expect(() => updateFinding(review, id, 'dismissed')).toThrow(/Explain why/);
-    expect(() => updateFinding(review, id, 'dismissed', '  ')).toThrow(/Explain why/);
-    const updated = updateFinding(review, id, 'dismissed', '  The claim refers to an unrelated service.  ');
-    expect(current(updated).findings[0].note).toBe('The claim refers to an unrelated service.');
-    expect(updated.events.at(-1)?.message).toContain('The claim refers to an unrelated service.');
+    expect(() => updateFinding(review, id, "dismissed")).toThrow(/Explain why/);
+    expect(() => updateFinding(review, id, "dismissed", "  ")).toThrow(
+      /Explain why/,
+    );
+    const updated = updateFinding(
+      review,
+      id,
+      "dismissed",
+      "  The claim refers to an unrelated service.  ",
+    );
+    expect(current(updated).findings[0].note).toBe(
+      "The claim refers to an unrelated service.",
+    );
+    expect(updated.events.at(-1)?.message).toContain(
+      "The claim refers to an unrelated service.",
+    );
   });
 
-  it('allows quick verification only for a changed anchored field with no remaining matching check', () => {
+  it("allows quick verification only for a changed anchored field with no remaining matching check", () => {
     let review = makeSeed()[0];
     for (const finding of current(review).findings) {
       expect(canVerifyFix(review, finding)).toBe(true);
-      review = updateFinding(review, finding.id, 'verified');
+      review = updateFinding(review, finding.id, "verified");
     }
-    expect(approveReview(review, true).status).toBe('approved');
+    expect(approveReview(review, true).status).toBe("approved");
   });
 
-  it('requires a reason for a new finding or a changed field that still matches the same check', () => {
-    const first = { ...makeSeed()[4], status: 'ready' as const };
+  it("requires a reason for a new finding or a changed field that still matches the same check", () => {
+    const first = { ...makeSeed()[4], status: "ready" as const };
     const finding = current(first).findings[0];
     expect(canVerifyFix(first, finding)).toBe(false);
-    expect(() => updateFinding(first, finding.id, 'verified')).toThrow(/review judgment/);
-    const waiting = requestChanges(first, 'Remove the guarantee.');
-    const revised = submitRevision(waiting, { ...current(waiting).creative, body: 'Apply today for guaranteed approval for a personal loan.' }, 'Reworded the introduction.');
+    expect(() => updateFinding(first, finding.id, "verified")).toThrow(
+      /review judgment/,
+    );
+    const waiting = requestChanges(first, "Remove the guarantee.");
+    const revised = submitRevision(
+      waiting,
+      {
+        ...current(waiting).creative,
+        body: "Apply today for guaranteed approval for a personal loan.",
+      },
+      "Reworded the introduction.",
+    );
     expect(canVerifyFix(revised, current(revised).findings[0])).toBe(false);
-    expect(() => updateFinding(revised, finding.id, 'verified', '  ')).toThrow(/review judgment/);
-    const resolved = updateFinding(revised, finding.id, 'verified', 'Reviewed supporting evidence and documented why this claim applies.');
-    expect(current(resolved).findings[0].status).toBe('verified');
-    expect(resolved.events.at(-1)?.message).toContain('Reviewed supporting evidence');
+    expect(() => updateFinding(revised, finding.id, "verified", "  ")).toThrow(
+      /review judgment/,
+    );
+    const resolved = updateFinding(
+      revised,
+      finding.id,
+      "verified",
+      "Reviewed supporting evidence and documented why this claim applies.",
+    );
+    expect(current(resolved).findings[0].status).toBe("verified");
+    expect(resolved.events.at(-1)?.message).toContain(
+      "Reviewed supporting evidence",
+    );
   });
 
-  it('requires a reason when only another creative field changed', () => {
+  it("requires a reason when only another creative field changed", () => {
     const review = makeSeed()[0];
-    const waiting = requestChanges(review, 'Expand the disclosure.');
-    const revised = submitRevision(waiting, { ...current(waiting).creative, disclosure: `${current(waiting).creative.disclosure} Read all terms before applying.` }, 'Expanded the disclosure.');
+    const waiting = requestChanges(review, "Expand the disclosure.");
+    const revised = submitRevision(
+      waiting,
+      {
+        ...current(waiting).creative,
+        disclosure: `${current(waiting).creative.disclosure} Read all terms before applying.`,
+      },
+      "Expanded the disclosure.",
+    );
     for (const finding of current(revised).findings) {
       expect(canVerifyFix(revised, finding)).toBe(false);
-      expect(() => updateFinding(revised, finding.id, 'verified')).toThrow(/review judgment/);
+      expect(() => updateFinding(revised, finding.id, "verified")).toThrow(
+        /review judgment/,
+      );
     }
   });
 });
 
-describe('human review findings', () => {
-  const input = { title: 'Offer is not available in every state', field: 'disclosure' as const, reason: 'The placement targets states excluded from this offer.', suggestion: 'Name the excluded states and update the campaign targeting.' };
+describe("human review findings", () => {
+  const input = {
+    title: "Offer is not available in every state",
+    field: "disclosure" as const,
+    reason: "The placement targets states excluded from this offer.",
+    suggestion: "Name the excluded states and update the campaign targeting.",
+  };
 
-  it('adds a reviewer finding without changing older versions and blocks approval', () => {
+  it("adds a reviewer finding without changing older versions and blocks approval", () => {
     const review = resolveFirstReview();
     const snapshot = structuredClone(review);
     const updated = addFinding(review, input);
     const finding = current(updated).findings.at(-1)!;
     expect(review).toEqual(snapshot);
     expect(updated.versions[0]).toEqual(snapshot.versions[0]);
-    expect(finding).toMatchObject({ ...input, policyId: 'Reviewer', status: 'open' });
+    expect(finding).toMatchObject({
+      ...input,
+      policyId: "Reviewer",
+      status: "open",
+    });
     expect(finding.id).toBeTruthy();
     expect(updated.events.at(-1)?.message).toContain(input.reason);
     expect(updated.events.at(-1)?.message).toContain(input.suggestion);
     expect(() => approveReview(updated, true)).toThrow(/every open finding/);
-    expect(current(addFinding(updated, input)).findings.at(-1)?.id).not.toBe(finding.id);
+    expect(current(addFinding(updated, input)).findings.at(-1)?.id).not.toBe(
+      finding.id,
+    );
   });
 
-  it('requires a ready review, a known field, and complete actionable text', () => {
+  it("requires a ready review, a known field, and complete actionable text", () => {
     expect(() => addFinding(makeSeed()[4], input)).toThrow(/ready/);
-    expect(() => addFinding(approveReview(resolveFirstReview(), true), input)).toThrow(/ready/);
-    for (const field of ['title', 'reason', 'suggestion']) {
-      expect(() => addFinding(makeSeed()[1], { ...input, [field]: ' ' })).toThrow(/title, reason, and requested change/);
+    expect(() =>
+      addFinding(approveReview(resolveFirstReview(), true), input),
+    ).toThrow(/ready/);
+    for (const field of ["title", "reason", "suggestion"]) {
+      expect(() =>
+        addFinding(makeSeed()[1], { ...input, [field]: " " }),
+      ).toThrow(/title, reason, and requested change/);
     }
-    expect(() => addFinding(makeSeed()[1], { ...input, field: 'unknown' as keyof Creative })).toThrow(/creative field/);
+    expect(() =>
+      addFinding(makeSeed()[1], {
+        ...input,
+        field: "unknown" as keyof Creative,
+      }),
+    ).toThrow(/creative field/);
   });
 
-  it('carries reviewer findings into the next version for explicit verification', () => {
+  it("carries reviewer findings into the next version for explicit verification", () => {
     const review = addFinding(makeSeed()[1], input);
-    const waiting = requestChanges(review, 'Please address the state restrictions.');
-    const revised = submitRevision(waiting, { ...current(waiting).creative, disclosure: `${current(waiting).creative.disclosure} Offer not available in all states.` }, 'Added the state restriction.');
-    expect(current(revised).findings.at(-1)).toMatchObject({ ...input, policyId: 'Reviewer', status: 'open' });
+    const waiting = requestChanges(
+      review,
+      "Please address the state restrictions.",
+    );
+    const revised = submitRevision(
+      waiting,
+      {
+        ...current(waiting).creative,
+        disclosure: `${current(waiting).creative.disclosure} Offer not available in all states.`,
+      },
+      "Added the state restriction.",
+    );
+    expect(current(revised).findings.at(-1)).toMatchObject({
+      ...input,
+      policyId: "Reviewer",
+      status: "open",
+    });
     expect(canVerifyFix(review, current(review).findings.at(-1)!)).toBe(false);
-    expect(() => updateFinding(review, current(review).findings.at(-1)!.id, 'verified')).toThrow(/review judgment/);
+    expect(() =>
+      updateFinding(review, current(review).findings.at(-1)!.id, "verified"),
+    ).toThrow(/review judgment/);
     expect(canVerifyFix(revised, current(revised).findings.at(-1)!)).toBe(true);
     expect(() => approveReview(revised, true)).toThrow(/every open finding/);
     mockStorage();
@@ -156,89 +269,197 @@ describe('human review findings', () => {
   });
 });
 
-describe('marketer revision loop', () => {
-  it('requires an actionable open finding and a handoff note', () => {
-    expect(() => requestChanges(resolveFirstReview(), 'Update the copy.')).toThrow(/at least one/);
-    expect(() => requestChanges(makeSeed()[0], ' ')).toThrow(/note/);
-    const waiting = requestChanges(makeSeed()[0], 'Please verify the offer range.');
-    expect(waiting.status).toBe('changes_requested');
+describe("marketer revision loop", () => {
+  it("requires an actionable open finding and a handoff note", () => {
+    expect(() =>
+      requestChanges(resolveFirstReview(), "Update the copy."),
+    ).toThrow(/at least one/);
+    expect(() => requestChanges(makeSeed()[0], " ")).toThrow(/note/);
+    const waiting = requestChanges(
+      makeSeed()[0],
+      "Please verify the offer range.",
+    );
+    expect(waiting.status).toBe("changes_requested");
     expect(() => approveReview(waiting, true)).toThrow(/ready/);
-    expect(() => requestChanges(waiting, 'Again.')).toThrow(/ready/);
+    expect(() => requestChanges(waiting, "Again.")).toThrow(/ready/);
   });
 
-  it('preserves old versions and reopens every carried finding for explicit verification', () => {
+  it("preserves old versions and reopens every carried finding for explicit verification", () => {
     let review = makeSeed()[0];
-    review = updateFinding(review, current(review).findings[0].id, 'dismissed', 'Reviewed in context.');
-    const waiting = requestChanges(review, 'Update the rate terms.');
+    review = updateFinding(
+      review,
+      current(review).findings[0].id,
+      "dismissed",
+      "Reviewed in context.",
+    );
+    const waiting = requestChanges(review, "Update the rate terms.");
     const snapshot = structuredClone(waiting);
-    const revised = submitRevision(waiting, { ...current(waiting).creative, body: 'Explore a personal loan. Check your options with ClearPath.' }, 'Removed the rate claim and simplified the offer.');
+    const revised = submitRevision(
+      waiting,
+      {
+        ...current(waiting).creative,
+        body: "Explore a personal loan. Check your options with ClearPath.",
+      },
+      "Removed the rate claim and simplified the offer.",
+    );
     expect(waiting).toEqual(snapshot);
     expect(revised.versions).toHaveLength(3);
     expect(revised.versions.slice(0, 2)).toEqual(snapshot.versions);
-    expect(revised.status).toBe('ready');
+    expect(revised.status).toBe("ready");
     expect(revised.approval).toBeUndefined();
-    expect(current(revised).findings.every((finding) => finding.status === 'open' && finding.note === undefined)).toBe(true);
+    expect(
+      current(revised).findings.every(
+        (finding) => finding.status === "open" && finding.note === undefined,
+      ),
+    ).toBe(true);
     expect(() => approveReview(revised, true)).toThrow(/every open finding/);
   });
 
-  it('rejects empty submissions and changes limited to whitespace or letter case', () => {
+  it("rejects empty submissions and changes limited to whitespace or letter case", () => {
     const waiting = makeSeed()[4];
     const creative = current(waiting).creative;
-    expect(() => submitRevision(waiting, creative, 'Done.')).toThrow(/Change the creative/);
-    expect(() => submitRevision(waiting, { ...creative, body: `  ${creative.body.toUpperCase()}  ` }, 'Done.')).toThrow(/Change the creative/);
-    expect(() => submitRevision(waiting, { ...creative, headline: '' }, 'Done.')).toThrow(/Complete/);
-    expect(() => submitRevision(waiting, { ...creative, headline: 'A different headline' }, ' ')).toThrow(/Explain/);
-    expect(() => submitRevision(makeSeed()[0], creative, 'Done.')).toThrow(/requested/);
+    expect(() => submitRevision(waiting, creative, "Done.")).toThrow(
+      /Change the creative/,
+    );
+    expect(() =>
+      submitRevision(
+        waiting,
+        { ...creative, body: `  ${creative.body.toUpperCase()}  ` },
+        "Done.",
+      ),
+    ).toThrow(/Change the creative/);
+    expect(() =>
+      submitRevision(waiting, { ...creative, headline: "" }, "Done."),
+    ).toThrow(/Complete/);
+    expect(() =>
+      submitRevision(
+        waiting,
+        { ...creative, headline: "A different headline" },
+        " ",
+      ),
+    ).toThrow(/Explain/);
+    expect(() => submitRevision(makeSeed()[0], creative, "Done.")).toThrow(
+      /requested/,
+    );
   });
 
-  it('adds newly introduced flags without duplicating inherited findings', () => {
+  it("adds newly introduced flags without duplicating inherited findings", () => {
     const waiting = makeSeed()[4];
-    const revised = submitRevision(waiting, {
-      ...current(waiting).creative, headline: 'Guaranteed approval', body: 'Get guaranteed approval. Rates from 8.99%.', disclosure: 'Subject to eligibility. Terms apply.',
-    }, 'Updated the headline and rate.');
-    expect(current(revised).findings.map((finding) => finding.id).sort()).toEqual(['claim-body', 'claim-headline', 'rate-body']);
+    const revised = submitRevision(
+      waiting,
+      {
+        ...current(waiting).creative,
+        headline: "Guaranteed approval",
+        body: "Get guaranteed approval. Rates from 8.99%.",
+        disclosure: "Subject to eligibility. Terms apply.",
+      },
+      "Updated the headline and rate.",
+    );
+    expect(
+      current(revised)
+        .findings.map((finding) => finding.id)
+        .sort(),
+    ).toEqual(["claim-body", "claim-headline", "rate-body"]);
   });
 });
 
-describe('illustrative checks and intake', () => {
-  it('flags a guarantee, an unidentified borrowing rate, and missing disclosure', () => {
-    const creative: Creative = { headline: 'Guaranteed approval', body: 'Rates from 7.99%', cta: 'Apply', disclosure: '' };
-    expect(checkCreative(creative).map((finding) => finding.policyId)).toEqual(['CP-01', 'CP-02', 'CP-03']);
+describe("illustrative checks and intake", () => {
+  it("flags a guarantee, an unidentified borrowing rate, and missing disclosure", () => {
+    const creative: Creative = {
+      headline: "Guaranteed approval",
+      body: "Rates from 7.99%",
+      cta: "Apply",
+      disclosure: "",
+    };
+    expect(checkCreative(creative).map((finding) => finding.policyId)).toEqual([
+      "CP-01",
+      "CP-02",
+      "CP-03",
+    ]);
     expect(checkCreative(creative)).toEqual(checkCreative(creative));
   });
 
-  it('does not label cash-back percentages as borrowing rates', () => {
-    const creative: Creative = { headline: 'Earn 2% cash back', body: 'Earn rewards on eligible purchases.', cta: 'Learn more', disclosure: 'See card terms.' };
+  it("does not label cash-back percentages as borrowing rates", () => {
+    const creative: Creative = {
+      headline: "Earn 2% cash back",
+      body: "Earn rewards on eligible purchases.",
+      cta: "Learn more",
+      disclosure: "See card terms.",
+    };
     expect(checkCreative(creative)).toEqual([]);
   });
 
-  it('creates a validated submission with context and derived findings', () => {
-    const input = { title: 'Test campaign', product: 'Personal loans' as const, channel: 'Email', placement: 'Email body', audience: 'US adults 18+', partner: 'ClearPath direct', owner: 'Jordan Lee', creative: current(makeSeed()[1]).creative };
+  it("creates a validated submission with context and derived findings", () => {
+    const input = {
+      title: "Test campaign",
+      product: "Personal loans" as const,
+      channel: "Email",
+      placement: "Email body",
+      audience: "US adults 18+",
+      partner: "ClearPath direct",
+      owner: "Jordan Lee",
+      creative: current(makeSeed()[1]).creative,
+    };
     const review = createReview(input);
-    expect(review.initials).toBe('JL');
-    expect(review.status).toBe('ready');
+    expect(review.initials).toBe("JL");
+    expect(review.status).toBe("ready");
     expect(current(review).number).toBe(1);
     expect(review.events).toHaveLength(1);
-    expect(() => createReview({ ...input, audience: ' ' })).toThrow(/audience/);
-    expect(() => createReview({ ...input, creative: { ...input.creative, disclosure: '' } })).toThrow(/Complete/);
+    expect(() => createReview({ ...input, audience: " " })).toThrow(/audience/);
+    expect(() =>
+      createReview({
+        ...input,
+        creative: { ...input.creative, disclosure: "" },
+      }),
+    ).toThrow(/Complete/);
     expect(createReview(input).id).not.toBe(review.id);
   });
 
-  it('stores the requested launch instant and rejects invalid launch timestamps', () => {
-    const input = { title: 'Test campaign', product: 'Personal loans' as const, channel: 'Email', placement: 'Email body', audience: 'US adults 18+', partner: 'ClearPath direct', owner: 'Jordan Lee', creative: current(makeSeed()[1]).creative };
-    const review = createReview({ ...input, due: '2026-11-03T12:30:00-08:00' });
-    expect(review.due).toBe('2026-11-03T20:30:00.000Z');
-    const waiting = requestChanges(addFinding(review, { title: 'Clarify offer terms', field: 'body', reason: 'The offer needs clarification.', suggestion: 'Describe the loan term.' }), 'Describe the loan term.');
-    const revised = submitRevision(waiting, { ...current(waiting).creative, body: `${current(waiting).creative.body} Terms of 24–60 months.` }, 'Added loan terms.');
+  it("stores the requested launch instant and rejects invalid launch timestamps", () => {
+    const input = {
+      title: "Test campaign",
+      product: "Personal loans" as const,
+      channel: "Email",
+      placement: "Email body",
+      audience: "US adults 18+",
+      partner: "ClearPath direct",
+      owner: "Jordan Lee",
+      creative: current(makeSeed()[1]).creative,
+    };
+    const review = createReview({ ...input, due: "2026-11-03T12:30:00-08:00" });
+    expect(review.due).toBe("2026-11-03T20:30:00.000Z");
+    const waiting = requestChanges(
+      addFinding(review, {
+        title: "Clarify offer terms",
+        field: "body",
+        reason: "The offer needs clarification.",
+        suggestion: "Describe the loan term.",
+      }),
+      "Describe the loan term.",
+    );
+    const revised = submitRevision(
+      waiting,
+      {
+        ...current(waiting).creative,
+        body: `${current(waiting).creative.body} Terms of 24–60 months.`,
+      },
+      "Added loan terms.",
+    );
     expect(revised.due).toBe(review.due);
-    for (const due of ['', 'tomorrow', '2026-11-03', '2026-02-30T12:00:00.000Z', '2026-11-03T99:00:00.000Z']) {
+    for (const due of [
+      "",
+      "tomorrow",
+      "2026-11-03",
+      "2026-02-30T12:00:00.000Z",
+      "2026-11-03T99:00:00.000Z",
+    ]) {
       expect(() => createReview({ ...input, due })).toThrow(/requested launch/);
     }
   });
 });
 
-describe('local persistence', () => {
-  it('round-trips the complete seven-review demonstration', () => {
+describe("local persistence", () => {
+  it("round-trips the complete seven-review demonstration", () => {
     const storage = mockStorage();
     const seed = makeSeed();
     expect(saveReviews(seed)).toBe(true);
@@ -246,19 +467,26 @@ describe('local persistence', () => {
     expect(loadReviews()).toEqual(seed);
   });
 
-  it('falls back safely for malformed JSON and malformed or duplicate review data', () => {
-    for (const malformed of ['', 'not JSON', '{}', '[]', '[{"id":"CP-1042"}]', JSON.stringify([makeSeed()[0], makeSeed()[0]])]) {
+  it("falls back safely for malformed JSON and malformed or duplicate review data", () => {
+    for (const malformed of [
+      "",
+      "not JSON",
+      "{}",
+      "[]",
+      '[{"id":"CP-1042"}]',
+      JSON.stringify([makeSeed()[0], makeSeed()[0]]),
+    ]) {
       const storage = mockStorage(malformed);
       expect(loadReviews()).toHaveLength(7);
-      expect(loadReviews()[0].id).toBe('CP-1042');
+      expect(loadReviews()[0].id).toBe("CP-1042");
       expect(storage.getItem(`${storageKey}-recovery`)).toBe(malformed);
       expect(storage.getItem(storageKey)).toBe(malformed);
       expect(readRecovery()).toBe(malformed);
-      expect(storageRecoveryNotice()).toContain('preserved');
+      expect(storageRecoveryNotice()).toContain("preserved");
     }
   });
 
-  it('retains the unreadable bytes before a later save replaces the active data', () => {
+  it("retains the unreadable bytes before a later save replaces the active data", () => {
     const raw = '{"versions": "older unsupported format"}';
     const storage = mockStorage(raw);
     const seed = loadReviews();
@@ -266,59 +494,72 @@ describe('local persistence', () => {
     expect(loadReviews()).toEqual(seed);
     expect(storage.getItem(`${storageKey}-recovery`)).toBe(raw);
     expect(readRecovery()).toBe(raw);
-    expect(storageRecoveryNotice()).toContain('download');
+    expect(storageRecoveryNotice()).toContain("download");
   });
 
-  it('also secures invalid data when saving before an initial load', () => {
-    const storage = mockStorage('unreadable original');
+  it("also secures invalid data when saving before an initial load", () => {
+    const storage = mockStorage("unreadable original");
     expect(saveReviews(makeSeed())).toBe(true);
-    expect(storage.getItem(`${storageKey}-recovery`)).toBe('unreadable original');
+    expect(storage.getItem(`${storageKey}-recovery`)).toBe(
+      "unreadable original",
+    );
   });
 
-  it('does not overwrite the original when storing its recovery copy fails', () => {
-    const storage = mockStorage('unreadable original');
+  it("does not overwrite the original when storing its recovery copy fails", () => {
+    const storage = mockStorage("unreadable original");
     storage.setItem.mockImplementation((key) => {
-      if (key === `${storageKey}-recovery`) throw new Error('Quota exceeded');
-      throw new Error('The original must not be written');
+      if (key === `${storageKey}-recovery`) throw new Error("Quota exceeded");
+      throw new Error("The original must not be written");
     });
     expect(loadReviews()).toHaveLength(7);
     expect(saveReviews(makeSeed())).toBe(false);
-    expect(storage.getItem(storageKey)).toBe('unreadable original');
-    expect(storage.setItem.mock.calls.every(([key]) => key === `${storageKey}-recovery`)).toBe(true);
-    expect(readRecovery()).toBe('unreadable original');
-    expect(storageRecoveryNotice()).toContain('saving is paused');
+    expect(storage.getItem(storageKey)).toBe("unreadable original");
+    expect(
+      storage.setItem.mock.calls.every(
+        ([key]) => key === `${storageKey}-recovery`,
+      ),
+    ).toBe(true);
+    expect(readRecovery()).toBe("unreadable original");
+    expect(storageRecoveryNotice()).toContain("saving is paused");
   });
 
-  it('preserves both copies when a different recovery already exists', () => {
-    const storage = mockStorage('new unreadable original');
-    storage.setItem(`${storageKey}-recovery`, 'earlier recovery');
+  it("preserves both copies when a different recovery already exists", () => {
+    const storage = mockStorage("new unreadable original");
+    storage.setItem(`${storageKey}-recovery`, "earlier recovery");
     loadReviews();
     expect(saveReviews(makeSeed())).toBe(false);
-    expect(storage.getItem(storageKey)).toBe('new unreadable original');
-    expect(storage.getItem(`${storageKey}-recovery`)).toBe('earlier recovery');
-    expect(readRecovery()).toBe('new unreadable original');
+    expect(storage.getItem(storageKey)).toBe("new unreadable original");
+    expect(storage.getItem(`${storageKey}-recovery`)).toBe("earlier recovery");
+    expect(readRecovery()).toBe("new unreadable original");
   });
 
-  it('rejects approvals for an old version or with unresolved findings', () => {
+  it("rejects approvals for an old version or with unresolved findings", () => {
     const seed = makeSeed();
     const approved = approveReview(resolveFirstReview(), true);
     seed[0] = { ...approved, approval: { ...approved.approval!, version: 1 } };
     mockStorage(JSON.stringify(seed));
-    expect(loadReviews()[0].status).toBe('ready');
+    expect(loadReviews()[0].status).toBe("ready");
     expect(saveReviews(seed)).toBe(false);
     seed[0] = { ...approved, versions: makeSeed()[0].versions };
     expect(saveReviews(seed)).toBe(false);
-    seed[0] = { ...approved, partner: 'A different affiliate' };
+    seed[0] = { ...approved, partner: "A different affiliate" };
     expect(saveReviews(seed)).toBe(false);
   });
 
-  it('never throws if storage is unavailable or full', () => {
-    vi.stubGlobal('localStorage', undefined);
+  it("never throws if storage is unavailable or full", () => {
+    vi.stubGlobal("localStorage", undefined);
     expect(loadReviews()).toHaveLength(7);
     expect(saveReviews(makeSeed())).toBe(false);
     expect(readRecovery()).toBeNull();
     expect(storageRecoveryNotice()).toBeNull();
-    vi.stubGlobal('localStorage', { getItem: () => { throw new Error('Unavailable'); }, setItem: () => { throw new Error('Quota'); } });
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("Unavailable");
+      },
+      setItem: () => {
+        throw new Error("Quota");
+      },
+    });
     expect(loadReviews()).toHaveLength(7);
     expect(saveReviews(makeSeed())).toBe(false);
   });
