@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  approveReview, checkCreative, createReview, current, loadReviews, makeSeed,
+  addFinding, approveReview, checkCreative, createReview, current, loadReviews, makeSeed,
   requestChanges, saveReviews, storageKey, submitRevision, updateFinding,
 } from './model';
 import type { Creative } from './model';
@@ -68,6 +68,55 @@ describe('review decisions', () => {
     expect(() => requestChanges(approved, 'Try something else.')).toThrow(/ready/);
     expect(() => submitRevision(approved, current(approved).creative, 'Changed it.')).toThrow(/requested/);
     expect(() => approveReview(approved, true)).toThrow(/ready/);
+  });
+
+  it('records a dismissal reason and rejects an unexplained dismissal', () => {
+    const review = makeSeed()[0];
+    const id = current(review).findings[0].id;
+    expect(() => updateFinding(review, id, 'dismissed')).toThrow(/Explain why/);
+    expect(() => updateFinding(review, id, 'dismissed', '  ')).toThrow(/Explain why/);
+    const updated = updateFinding(review, id, 'dismissed', '  The claim refers to an unrelated service.  ');
+    expect(current(updated).findings[0].note).toBe('The claim refers to an unrelated service.');
+    expect(updated.events.at(-1)?.message).toContain('The claim refers to an unrelated service.');
+  });
+});
+
+describe('human review findings', () => {
+  const input = { title: 'Offer is not available in every state', field: 'disclosure' as const, reason: 'The placement targets states excluded from this offer.', suggestion: 'Name the excluded states and update the campaign targeting.' };
+
+  it('adds a reviewer finding without changing older versions and blocks approval', () => {
+    const review = resolveFirstReview();
+    const snapshot = structuredClone(review);
+    const updated = addFinding(review, input);
+    const finding = current(updated).findings.at(-1)!;
+    expect(review).toEqual(snapshot);
+    expect(updated.versions[0]).toEqual(snapshot.versions[0]);
+    expect(finding).toMatchObject({ ...input, policyId: 'Reviewer', status: 'open' });
+    expect(finding.id).toBeTruthy();
+    expect(updated.events.at(-1)?.message).toContain(input.reason);
+    expect(updated.events.at(-1)?.message).toContain(input.suggestion);
+    expect(() => approveReview(updated, true)).toThrow(/every open finding/);
+    expect(current(addFinding(updated, input)).findings.at(-1)?.id).not.toBe(finding.id);
+  });
+
+  it('requires a ready review, a known field, and complete actionable text', () => {
+    expect(() => addFinding(makeSeed()[4], input)).toThrow(/ready/);
+    expect(() => addFinding(approveReview(resolveFirstReview(), true), input)).toThrow(/ready/);
+    for (const field of ['title', 'reason', 'suggestion']) {
+      expect(() => addFinding(makeSeed()[1], { ...input, [field]: ' ' })).toThrow(/title, reason, and requested change/);
+    }
+    expect(() => addFinding(makeSeed()[1], { ...input, field: 'unknown' as keyof Creative })).toThrow(/creative field/);
+  });
+
+  it('carries reviewer findings into the next version for explicit verification', () => {
+    const review = addFinding(makeSeed()[1], input);
+    const waiting = requestChanges(review, 'Please address the state restrictions.');
+    const revised = submitRevision(waiting, { ...current(waiting).creative, disclosure: `${current(waiting).creative.disclosure} Offer not available in all states.` }, 'Added the state restriction.');
+    expect(current(revised).findings.at(-1)).toMatchObject({ ...input, policyId: 'Reviewer', status: 'open' });
+    expect(() => approveReview(revised, true)).toThrow(/every open finding/);
+    mockStorage();
+    expect(saveReviews([revised])).toBe(true);
+    expect(loadReviews()).toEqual([revised]);
   });
 });
 

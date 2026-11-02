@@ -109,10 +109,24 @@ export function checkCreative(creative: Creative): Finding[] {
   return findings;
 }
 
+export function addFinding(review: Review, input: { title: string; field: keyof Creative; reason: string; suggestion: string }): Review {
+  requireThat(review.status === 'ready', 'Findings can only be added to a ready review.');
+  requireThat(fields.includes(input.field), 'Choose a creative field for this finding.');
+  requireThat(nonempty(input.title) && nonempty(input.reason) && nonempty(input.suggestion), 'Add a finding title, reason, and requested change.');
+  const version = current(review);
+  const finding: Finding = {
+    id: uid(), title: input.title.trim(), field: input.field, reason: input.reason.trim(),
+    suggestion: input.suggestion.trim(), policyId: 'Reviewer', status: 'open',
+  };
+  return recordEvent(replaceCurrent(review, { ...version, findings: [...version.findings, finding] }), 'You',
+    `Added “${finding.title}” on v${version.number} (${finding.field}): ${finding.reason} Requested change: ${finding.suggestion}`);
+}
+
 export function updateFinding(review: Review, id: string, status: Finding['status'], note = ''): Review {
   requireThat(review.status === 'ready', 'Only a review that is ready can have its findings changed.');
   requireThat(findingStatuses.includes(status), 'Choose a valid finding status.');
   requireThat(typeof note === 'string', 'The finding note must be text.');
+  requireThat(status !== 'dismissed' || nonempty(note), 'Explain why this finding can be dismissed.');
   const version = current(review);
   const finding = version.findings.find((item) => item.id === id);
   requireThat(finding, 'This finding does not belong to the current version.');
@@ -241,7 +255,7 @@ const unique = (values: string[]) => new Set(values).size === values.length;
 function validFinding(value: unknown): value is Finding {
   return object(value) && ['id', 'title', 'policyId', 'reason', 'suggestion'].every((key) => nonempty(value[key])) &&
     fields.includes(value.field as keyof Creative) && findingStatuses.includes(value.status as string) &&
-    (value.note === undefined || typeof value.note === 'string');
+    (value.note === undefined || typeof value.note === 'string') && (value.status !== 'dismissed' || nonempty(value.note));
 }
 
 function validVersion(value: unknown, index: number): value is Version {
