@@ -14,7 +14,7 @@ A working prototype for getting financial marketing copy through compliance revi
 I focused on the moment a revision comes back: what changed, why it changed, and what still needs a decision. Making that moment easier also gives the marketer a clearer checklist and the team a useful approval record.
 
 ## First-draft demo (superseded)
-[Open the superseded first draft](https://cfireborn.github.io/promptarmor/) · [GitHub repository](https://github.com/cfireborn/promptarmor)
+[Open the superseded first draft](https://cfireborn.github.io/promptarmor/) · [GitHub repository](https://github.com/cfireborn/promptarmor-first-draft-not-final)
 
 No signup. Fictional campaigns and policies. Submitted work stays in your browser; nothing is sent to an AI service or another person. Use **Reset demo** in the sidebar, or **How to explore → Restart demo** on mobile, to start again.
 
@@ -53,8 +53,8 @@ The hypothesis: some of the bottleneck comes from incomplete context and repeate
 Node.js 22.12+ and npm; tested with Node 22.23.2. Browser tests use an installed Google Chrome.
 
 ```bash
-git clone git@github.com:cfireborn/promptarmor.git
-cd promptarmor
+git clone git@github.com:cfireborn/promptarmor-first-draft-not-final.git
+cd promptarmor-first-draft-not-final
 npm ci
 npm run dev
 ```
@@ -76,27 +76,27 @@ These are GIF walkthroughs assembled from actual browser captures taken at each 
 ### Phase 1: First working draft
 ![First working draft](media/videos/phase1-draft.gif)
 
-A plain queue, two checkboxes, and an approval action. Enough to exercise the basic interaction before styling it. [Checkpoint: milestone-1-draft](https://github.com/cfireborn/promptarmor/tree/milestone-1-draft).
+A plain queue, two checkboxes, and an approval action. Enough to exercise the basic interaction before styling it. [Checkpoint: milestone-1-draft](https://github.com/cfireborn/promptarmor-first-draft-not-final/tree/milestone-1-draft).
 
 ### Phase 2: A review workspace
 ![Styled review workspace](media/videos/phase2-workspace.gif)
 
-Added the queue, copy preview, comparison, policies, and complete handoff. This was also the first deployed version. [Checkpoint: milestone-2-workspace](https://github.com/cfireborn/promptarmor/tree/milestone-2-workspace).
+Added the queue, copy preview, comparison, policies, and complete handoff. This was also the first deployed version. [Checkpoint: milestone-2-workspace](https://github.com/cfireborn/promptarmor-first-draft-not-final/tree/milestone-2-workspace).
 
 ### Phase 3: Make the handoff dependable
 ![Marketer revision handoff](media/videos/phase3-handoff.gif)
 
-Increased reading size and contrast. Adversarial review caught ambiguous resolution actions, accidental draft loss, and silent replacement of unreadable saved data. Added rationale requirements, draft protection, recovery, and a real requested-launch field. [Checkpoint: milestone-3-handoff](https://github.com/cfireborn/promptarmor/tree/milestone-3-handoff).
+Increased reading size and contrast. Adversarial review caught ambiguous resolution actions, accidental draft loss, and silent replacement of unreadable saved data. Added rationale requirements, draft protection, recovery, and a real requested-launch field. [Checkpoint: milestone-3-handoff](https://github.com/cfireborn/promptarmor-first-draft-not-final/tree/milestone-3-handoff).
 
 ### Phase 4: Approval detail and loading
 ![Exact-version approval](media/videos/phase4-decisions.gif)
 
-Made the approval scope explicit and downloadable. Bundled fonts locally to remove the external font request; formatted the source and added browser regression coverage. [Checkpoint: milestone-4-decisions](https://github.com/cfireborn/promptarmor/tree/milestone-4-decisions).
+Made the approval scope explicit and downloadable. Bundled fonts locally to remove the external font request; formatted the source and added browser regression coverage. [Checkpoint: milestone-4-decisions](https://github.com/cfireborn/promptarmor-first-draft-not-final/tree/milestone-4-decisions).
 
 ### Phase 5: The small interaction details
 ![Mobile workflow](media/videos/phase5-mobile.gif)
 
-Resolved findings collapse while retaining their original concern. Keyboard focus moves to the next finding or approval action. Checked the phone layout, added mobile demo reset, and separated unit/browser test discovery. [Checkpoint: milestone-5-polish](https://github.com/cfireborn/promptarmor/tree/milestone-5-polish).
+Resolved findings collapse while retaining their original concern. Keyboard focus moves to the next finding or approval action. Checked the phone layout, added mobile demo reset, and separated unit/browser test discovery. [Checkpoint: milestone-5-polish](https://github.com/cfireborn/promptarmor-first-draft-not-final/tree/milestone-5-polish).
 
 ### Time Spent
 Work began November 1, 2026, Pacific time. Git records the initial guidance at 5:43 PM, first functional draft at 5:45, full workspace at 5:54, adversarial fixes at 5:58, and font/decision pass at 6:00. Final mobile checks, documentation, and deployment followed. These are wall-clock checkpoints with parallel AI work, not estimates of individual effort. The commit history is the detailed record.
