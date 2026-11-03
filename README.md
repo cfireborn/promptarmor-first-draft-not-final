@@ -1,12 +1,20 @@
-# ClearPath Review
+# ClearPath Review — Superseded First Draft
+
+> [!CAUTION]
+> **This is NOT the final delivered submission.** This repository is a dead-end first draft, retained only for historical context.
+>
+> **Final source:** [promptArmorTakeHome](https://github.com/cfireborn/promptArmorTakeHome)
+> **Final deployed product:** [Relay / marketingreview](https://cfireborn.github.io/marketingreview/)
+
+The final submission takes a different approach: compliance can offer a concrete, pre-approved correction that creative accepts without another review round. The notes and demos below describe only this abandoned first draft.
 
 ## Summary
 A working prototype for getting financial marketing copy through compliance review with less back-and-forth.
 
 I focused on the moment a revision comes back: what changed, why it changed, and what still needs a decision. Making that moment easier also gives the marketer a clearer checklist and the team a useful approval record.
 
-## Live Demo
-[Open ClearPath Review](https://cfireborn.github.io/promptarmor/) · [GitHub repository](https://github.com/cfireborn/promptarmor)
+## First-draft demo (superseded)
+[Open the superseded first draft](https://cfireborn.github.io/promptarmor/) · [GitHub repository](https://github.com/cfireborn/promptarmor)
 
 No signup. Fictional campaigns and policies. Submitted work stays in your browser; nothing is sent to an AI service or another person. Use **Reset demo** in the sidebar, or **How to explore → Restart demo** on mobile, to start again.
 

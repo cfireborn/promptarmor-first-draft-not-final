@@ -6,11 +6,41 @@
     <meta name="theme-color" content="#143d36" />
     <meta
       name="description"
-      content="A focused workspace for financial marketing review. Review changes, give clear feedback, and approve the exact creative."
+      content="Superseded first draft. Find the final Relay submission at cfireborn.github.io/marketingreview/ and github.com/cfireborn/promptArmorTakeHome."
     />
-    <title>ClearPath — Marketing review</title>
+    <title>First draft — NOT the final submission</title>
+
+    <style>
+      :root { --submission-notice-height: 230px; }
+      body { padding-top: var(--submission-notice-height); }
+      .submission-notice { position: fixed; inset: 0 0 auto; z-index: 1000; padding: 24px 20px; border-bottom: 6px solid #7f0b0b; background: #b91c1c; color: #fff; text-align: center; font-family: system-ui, sans-serif; box-shadow: 0 3px 16px #0003; }
+      .submission-notice strong { display: block; font-size: clamp(25px, 3vw, 42px); font-weight: 900; line-height: 1.15; }
+      .submission-notice p { margin: 12px 0 16px; font-size: 18px; line-height: 1.4; }
+      .submission-notice nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; }
+      .submission-notice a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; border: 2px solid #fff; border-radius: 6px; color: #fff; font-size: 16px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+      .submission-notice a:hover { background: #991b1b; }
+      .submission-notice a:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+      @media (min-width: 701px) { body .sidebar { top: var(--submission-notice-height); } }
+      body .skip-link:focus { top: calc(var(--submission-notice-height) + 10px); }
+      @media (max-width: 480px) { .submission-notice { padding: 18px 12px; } .submission-notice p { font-size: 16px; } .submission-notice nav { gap: 8px; } .submission-notice a { width: 100%; justify-content: center; padding: 8px; font-size: 14px; } }
+    </style>
   </head>
   <body>
+    <aside class="submission-notice" aria-labelledby="submission-notice-title">
+      <strong id="submission-notice-title">NOT THE FINAL DELIVERED SUBMISSION</strong>
+      <p>This is a dead-end first draft. The final submission is Relay.</p>
+      <nav aria-label="Final submission links">
+        <a href="https://cfireborn.github.io/marketingreview/">Open final demo: marketingreview →</a>
+        <a href="https://github.com/cfireborn/promptArmorTakeHome">Final source: promptArmorTakeHome →</a>
+      </nav>
+    </aside>
+    <script>
+      const notice = document.querySelector('.submission-notice');
+      const sizeNotice = () => document.documentElement.style.setProperty('--submission-notice-height', `${notice.offsetHeight}px`);
+      sizeNotice();
+      new ResizeObserver(sizeNotice).observe(notice);
+    </script>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
